@@ -49,7 +49,7 @@ func (r Request) encodeSANExt() *pkixAttribute {
 	return attr
 }
 
-func EncodeRequest(key *rsa.PrivateKey, req *Request) ([]byte, error) {
+func (req *Request) Marshal(key *rsa.PrivateKey) ([]byte, error) {
 	csr := pkixRequest{
 		RequestInfo: pkixRequestInfo{
 			Subject:       req.Subject.ToRDNSequence(),
