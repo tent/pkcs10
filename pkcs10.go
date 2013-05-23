@@ -10,53 +10,54 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"math/big"
+	"net"
 )
 
-type Details struct {
-	Organization       string
-	OrganizationalUnit string
-	Country            string
-	Locality           string
-	Province           string
-	StreetAddress      string
-	PostalCode         string
-	CommonName         string
+type Request struct {
+	Subject pkix.Name
 
-	SubjectAlternateNames []string
+	// Subject Alternate Name values
+	AltDNSNames       []string
+	AltEmailAddresses []string
+	AltIPAddresses    []net.IP
 }
 
-func (d Details) toPkixName() pkix.Name {
-	n := pkix.Name{CommonName: d.CommonName}
-	if d.Country != "" {
-		n.Country = []string{d.Country}
+func (r Request) encodeSANExt() *pkixAttribute {
+	if len(r.AltDNSNames) == 0 && len(r.AltEmailAddresses) == 0 && len(r.AltIPAddresses) == 0 {
+		return nil
 	}
-	if d.Organization != "" {
-		n.Organization = []string{d.Organization}
+	attr := &pkixAttribute{Type: oidPKCS9ExtensionRequest}
+	ext := pkix.Extension{Id: oidExtensionSubjectAltName}
+
+	var rawValues []asn1.RawValue
+	for _, name := range r.AltDNSNames {
+		rawValues = append(rawValues, asn1.RawValue{Tag: 2, Class: 2, Bytes: []byte(name)})
 	}
-	if d.OrganizationalUnit != "" {
-		n.OrganizationalUnit = []string{d.OrganizationalUnit}
+	for _, email := range r.AltEmailAddresses {
+		rawValues = append(rawValues, asn1.RawValue{Tag: 1, Class: 2, Bytes: []byte(email)})
 	}
-	if d.Locality != "" {
-		n.Locality = []string{d.Locality}
+	for _, rawIP := range r.AltIPAddresses {
+		// If possible, we always want to encode IPv4 addresses in 4 bytes.
+		ip := rawIP.To4()
+		if ip == nil {
+			ip = rawIP
+		}
+		rawValues = append(rawValues, asn1.RawValue{Tag: 7, Class: 2, Bytes: ip})
 	}
-	if d.Province != "" {
-		n.Province = []string{d.Province}
-	}
-	if d.StreetAddress != "" {
-		n.StreetAddress = []string{d.StreetAddress}
-	}
-	if d.PostalCode != "" {
-		n.PostalCode = []string{d.PostalCode}
-	}
-	return n
+	ext.Value, _ = asn1.Marshal(rawValues)
+	attr.Values = []interface{}{[]pkix.Extension{ext}}
+	return attr
 }
 
-func CreateRequest(key *rsa.PrivateKey, details *Details) ([]byte, error) {
+func EncodeRequest(key *rsa.PrivateKey, req *Request) ([]byte, error) {
 	csr := pkixRequest{
 		RequestInfo: pkixRequestInfo{
-			Subject:       details.toPkixName().ToRDNSequence(),
+			Subject:       req.Subject.ToRDNSequence(),
 			SubjectPKInfo: encodePublicKey(&key.PublicKey),
 		},
+	}
+	if ext := req.encodeSANExt(); ext != nil {
+		csr.RequestInfo.Attributes = append(csr.RequestInfo.Attributes, *ext)
 	}
 	var err error
 	csr.SignatureAlgorithm, csr.Signature, err = csr.RequestInfo.signature(key)
@@ -99,7 +100,7 @@ type pkixPublicKey struct {
 
 type pkixAttribute struct {
 	Type   asn1.ObjectIdentifier
-	Values []interface{}
+	Values []interface{} `asn1:"set"`
 }
 
 // rsaPublicKey reflects the ASN.1 structure of a PKCS#1 public key.
@@ -108,8 +109,12 @@ type rsaPublicKey struct {
 	E int
 }
 
-var oidSignatureSHA1WithRSA = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 5}
-var oidPublicKeyRSA = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 1}
+var (
+	oidSignatureSHA1WithRSA    = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 5}
+	oidPublicKeyRSA            = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 1}
+	oidPKCS9ExtensionRequest   = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 9, 14}
+	oidExtensionSubjectAltName = asn1.ObjectIdentifier{2, 5, 29, 17}
+)
 
 func encodePublicKey(pub *rsa.PublicKey) pkixPublicKey {
 	data, _ := asn1.Marshal(rsaPublicKey{N: pub.N, E: pub.E})
