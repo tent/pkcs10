@@ -26,7 +26,8 @@ func main() {
 			Organization: []string{"Test Org"},
 			CommonName:   "example.com",
 		},
-		AltDNSNames: []string{"example.net", "example.org", "example.io"},
+		EmailAddress: "test@example.com",
+		AltDNSNames:  []string{"example.net", "example.org", "example.io"},
 	}).Marshal(key)
 	maybePanic(err)
 	err = pem.Encode(os.Stdout, &pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csr})

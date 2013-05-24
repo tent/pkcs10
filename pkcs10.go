@@ -14,7 +14,8 @@ import (
 )
 
 type Request struct {
-	Subject pkix.Name
+	Subject      pkix.Name
+	EmailAddress string
 
 	// Subject Alternate Name values
 	AltDNSNames       []string
@@ -55,6 +56,10 @@ func (req *Request) Marshal(key *rsa.PrivateKey) ([]byte, error) {
 			Subject:       req.Subject.ToRDNSequence(),
 			SubjectPKInfo: encodePublicKey(&key.PublicKey),
 		},
+	}
+	if req.EmailAddress != "" {
+		rdn := pkix.RelativeDistinguishedNameSET{pkix.AttributeTypeAndValue{Type: oidEmailAddress, Value: req.EmailAddress}}
+		csr.RequestInfo.Subject = append(csr.RequestInfo.Subject, rdn)
 	}
 	if ext := req.encodeSANExt(); ext != nil {
 		csr.RequestInfo.Attributes = append(csr.RequestInfo.Attributes, *ext)
@@ -112,6 +117,7 @@ type rsaPublicKey struct {
 var (
 	oidSignatureSHA1WithRSA    = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 5}
 	oidPublicKeyRSA            = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 1, 1}
+	oidEmailAddress            = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 9, 1}
 	oidPKCS9ExtensionRequest   = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 9, 14}
 	oidExtensionSubjectAltName = asn1.ObjectIdentifier{2, 5, 29, 17}
 )
