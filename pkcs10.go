@@ -13,6 +13,7 @@ import (
 	"net"
 )
 
+// Request represents a basic CSR.
 type Request struct {
 	Subject      pkix.Name
 	EmailAddress string
@@ -50,6 +51,7 @@ func (r Request) encodeSANExt() *pkixAttribute {
 	return attr
 }
 
+// Marshal signs and DER encodes a request using the provided key.
 func (req *Request) Marshal(key *rsa.PrivateKey) ([]byte, error) {
 	csr := pkixRequest{
 		RequestInfo: pkixRequestInfo{
